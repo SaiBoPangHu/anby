@@ -1,0 +1,14 @@
+# Local data written beside AnbyPet.exe and prepared release files
+/AnbyPet/
+/AnbyPet.exe
+/releases/
+/.anby-icon-*.ico
+
+# Windows and editor build artifacts
+/.vs/
+/bin/
+/obj/
+*.user
+*.suo
+*.pdb
+Thumbs.db
