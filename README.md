@@ -4,6 +4,12 @@ AnbyPet 是一个 Windows x64 桌面宠物与监测面板，使用 C#、WinForms
 
 [下载 v1.0.0](https://github.com/SaiBoPangHu/anby/releases/tag/v1.0.0)
 
+## 运行截图
+
+![AnbyPet v1.0.0 运行截图，左侧是独立安比，右侧是系统监测面板](docs/screenshots/anbypet-running.png)
+
+截图取自 Windows 10 上运行的独立展示实例，CPU 和 GPU 使用实时采样，额度区处于未连接账号的状态。
+
 ## 开始使用
 
 1. 下载 `AnbyPet.exe`，或解压 `AnbyPet-v1.0.0-windows-x64.zip`。可将程序放在 `D:\Apps\AnbyPet\` 等目录。
