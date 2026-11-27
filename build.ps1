@@ -3,6 +3,8 @@ $projectPath = $PSScriptRoot
 $sourcesPath = Join-Path $projectPath 'src'
 $exePath = Join-Path $projectPath 'AnbyPet.exe'
 $spritePath = Join-Path $projectPath 'anby-desktop-pet-v1.png'
+$petFullPath = Join-Path $projectPath 'anby-burger-halfbody-v2-mirror.png'
+$petEmptyPath = Join-Path $projectPath 'assets\anby-burger-empty.png'
 $capturePath = Join-Path $projectPath 'third_party\PresentMon\PresentMon-2.6.0-x64.exe'
 $captureNotice = Join-Path $projectPath 'third_party\PresentMon\LICENSE.txt'
 $captureDigest = 'B2A706BC6AD475749E3B7E3409263AA1E6906D45BDCF993F6DBC0F660188F1AF'
@@ -60,7 +62,7 @@ try {
     $sources = @(Get-ChildItem -LiteralPath $sourcesPath -Filter '*.cs' -File | ForEach-Object FullName)
     & $compilerPath /nologo /target:winexe /platform:x64 /optimize+ /warnaserror+ /codepage:65001 `
         "/out:$exePath" "/win32manifest:$manifestPath" "/win32icon:$iconPath" `
-        "/resource:$spritePath,AnbyPet.Sprite.png" "/resource:$iconPath,AnbyPet.Tray.ico" `
+        "/resource:$petFullPath,AnbyPet.PetFull.png" "/resource:$petEmptyPath,AnbyPet.PetEmpty.png" "/resource:$iconPath,AnbyPet.Tray.ico" `
         "/resource:$capturePath,AnbyPet.PresentMon.exe" "/resource:$captureNotice,AnbyPet.PresentMon.LICENSE.txt" `
         /reference:System.dll /reference:System.Core.dll /reference:System.Drawing.dll `
         /reference:System.Windows.Forms.dll /reference:System.Web.Extensions.dll /reference:System.Management.dll @sources
