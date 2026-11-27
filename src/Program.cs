@@ -22,6 +22,7 @@ namespace AnbyPet
     {
         internal const string ControlWindowName = "AnbyPet.RunningInstance.1";
         internal const int ShowDashboard = 0x8001;
+        internal const int ShowDesktopPet = 0x8002;
 
         [STAThread]
         private static int Main(string[] args)
@@ -44,7 +45,7 @@ namespace AnbyPet
                             var window = FindWindow(null, ControlWindowName);
                             if (window != IntPtr.Zero)
                             {
-                                PostMessage(window, ShowDashboard, IntPtr.Zero, IntPtr.Zero);
+                                PostMessage(window, ShowDesktopPet, IntPtr.Zero, IntPtr.Zero);
                                 break;
                             }
                             Thread.Sleep(50);
@@ -56,7 +57,10 @@ namespace AnbyPet
                 Application.EnableVisualStyles();
                 Application.SetCompatibleTextRenderingDefault(false);
                 using (var context = new TrayApp(exe, store, startedAtLogon))
+                {
+                    if (!startedAtLogon) context.ShowPet();
                     Application.Run(context);
+                }
                 return 0;
             }
         }
@@ -100,7 +104,7 @@ namespace AnbyPet
         private string codexIssue;
         private AntigravityReadResult antigravityAttempt;
         private long nextProcesses;
-        private bool disposed;
+        private bool disposed, monitoringVisible;
         private DesktopPet pet;
 
         internal TrayApp(string exe, LocalStore store, bool startedAtLogon)
@@ -117,7 +121,7 @@ namespace AnbyPet
             dashboard = new Dashboard(icon, applicationMenu);
             monitor = new LoadMonitor();
             frameRate = new FrameRateMonitor(store);
-            control = new ControlWindow(ShowPanel, monitor.RefreshAdapters);
+            control = new ControlWindow(ShowPanel, ShowPet, monitor.RefreshAdapters);
             startupMenu = new ToolStripMenuItem("登录时启动", null, delegate { ToggleStartup(); });
             petMenu = new ToolStripMenuItem("显示安比", null, delegate { TogglePet(); });
             menu = new ContextMenuStrip();
@@ -133,14 +137,14 @@ namespace AnbyPet
             menu.Items.Add(new ToolStripMenuItem("退出", null, delegate { ExitThread(); }));
 
             tray = new NotifyIcon { Icon = icon, Text = "AnbyPet", ContextMenuStrip = menu, Visible = true };
-            tray.MouseClick += delegate(object sender, MouseEventArgs e) { if (e.Button == MouseButtons.Left) ShowPanel(); };
+            tray.MouseClick += delegate(object sender, MouseEventArgs e) { if (e.Button == MouseButtons.Left) ShowPet(); };
 
             LoadStartupPreference(startedAtLogon);
-            timer = new Timer { Interval = OpenInterval };
-            timer.Tick += Tick;
+            timer = new Timer { Interval = QuietInterval };
+            timer.Tick += delegate { Sample(); };
             fullscreenTimer = new Timer { Interval = 1000 };
             fullscreenTimer.Tick += delegate { PlaceFullscreenWindows(); };
-            dashboard.VisibleChanged += DashboardVisibilityChanged;
+            dashboard.VisibleChanged += MonitorVisibilityChanged;
             timer.Start();
         }
 
@@ -210,14 +214,22 @@ namespace AnbyPet
 
         private void TogglePet()
         {
+            if (pet != null && pet.Visible) pet.Hide();
+            else ShowPet();
+        }
+
+        internal void ShowPet()
+        {
+            if (disposed) return;
             if (pet == null)
             {
-                pet = new DesktopPet();
-                pet.VisibleChanged += delegate { UpdateFullscreenTimer(); };
+                pet = new DesktopPet(ShowPanel);
+                pet.VisibleChanged += MonitorVisibilityChanged;
             }
-            if (pet.Visible) pet.Hide();
-            else pet.Open();
-            petMenu.Text = pet.Visible ? "隐藏安比" : "显示安比";
+            if (pet.Visible) return;
+            pet.UpdateReadings(readings);
+            pet.Open();
+            Sample();
         }
 
         private ToolStripItem[] ApplicationCommands()
@@ -303,16 +315,24 @@ namespace AnbyPet
         private void ShowPanel()
         {
             if (disposed) return;
+            if (pet != null) pet.CloseQuotaHint();
             dashboard.Open(readings);
             Sample();
         }
 
-        private void DashboardVisibilityChanged(object sender, EventArgs e)
+        private void MonitorVisibilityChanged(object sender, EventArgs e)
         {
-            UpdateTimerInterval();
-            bool visible = dashboard.Visible;
-            antigravityCliPoll.Reschedule(clock.ElapsedMilliseconds,
-                visible ? AntigravityCliOpenInterval : AntigravityCliQuietInterval, visible);
+            if (disposed) return;
+            bool petVisible = pet != null && pet.Visible;
+            petMenu.Text = petVisible ? "隐藏安比" : "显示安比";
+            bool visible = dashboard.Visible || petVisible;
+            if (monitoringVisible != visible)
+            {
+                monitoringVisible = visible;
+                timer.Interval = visible ? OpenInterval : QuietInterval;
+                antigravityCliPoll.Reschedule(clock.ElapsedMilliseconds,
+                    visible ? AntigravityCliOpenInterval : AntigravityCliQuietInterval, visible);
+            }
             UpdateFullscreenTimer();
         }
 
@@ -342,24 +362,12 @@ namespace AnbyPet
             }
         }
 
-        private void UpdateTimerInterval()
-        {
-            int interval = dashboard.Visible ? OpenInterval : QuietInterval;
-            if (timer.Interval != interval) timer.Interval = interval;
-        }
-
-        private void Tick(object sender, EventArgs e)
-        {
-            Sample();
-            UpdateTimerInterval();
-        }
-
         private void Sample()
         {
             long time = clock.ElapsedMilliseconds;
             readings.Cpu = monitor.Cpu();
             readings.GpuLoad = monitor.Gpu();
-            readings.Fps = frameRate.Sample(time, dashboard.Visible);
+            readings.Fps = frameRate.Sample(time, monitoringVisible);
             if (time >= nextProcesses)
             {
                 readings.Providers = ProviderProcesses.Read(antigravityCli.ActivePid, codexAccount.ActivePid);
@@ -401,7 +409,7 @@ namespace AnbyPet
         {
             var poll = antigravityCliPoll;
             if (!poll.CanRead(time)) return;
-            int interval = dashboard.Visible ? AntigravityCliOpenInterval : AntigravityCliQuietInterval;
+            int interval = monitoringVisible ? AntigravityCliOpenInterval : AntigravityCliQuietInterval;
             AntigravityReadResult attempt = null;
             ReadQuota(poll, time, interval,
                 delegate(CancellationToken token)
@@ -477,6 +485,7 @@ namespace AnbyPet
             if (!string.Equals(tooltip, tray.Text, StringComparison.Ordinal))
                 tray.Text = tooltip.Length > 63 ? tooltip.Substring(0, 63) : tooltip;
             if (dashboard.Visible) dashboard.UpdateReadings(readings);
+            if (pet != null && pet.Visible) pet.UpdateReadings(readings);
         }
 
         protected override void Dispose(bool disposing)
@@ -489,7 +498,7 @@ namespace AnbyPet
                 if (antigravityCliPoll.Request != null) antigravityCliPoll.Request.Cancel();
                 timer.Dispose();
                 fullscreenTimer.Dispose();
-                dashboard.VisibleChanged -= DashboardVisibilityChanged;
+                dashboard.VisibleChanged -= MonitorVisibilityChanged;
                 tray.Visible = false;
                 tray.Dispose();
                 menu.Dispose();
@@ -497,7 +506,11 @@ namespace AnbyPet
                 control.DestroyHandle();
                 monitor.Dispose();
                 frameRate.Dispose();
-                if (pet != null) pet.Dispose();
+                if (pet != null)
+                {
+                    pet.VisibleChanged -= MonitorVisibilityChanged;
+                    pet.Dispose();
+                }
                 dashboard.Dispose();
                 icon.Dispose();
             }
@@ -562,18 +575,20 @@ namespace AnbyPet
 
         private sealed class ControlWindow : NativeWindow
         {
-            private readonly Action show, displayChanged;
+            private readonly Action showPanel, showPet, displayChanged;
 
-            internal ControlWindow(Action show, Action displayChanged)
+            internal ControlWindow(Action showPanel, Action showPet, Action displayChanged)
             {
-                this.show = show;
+                this.showPanel = showPanel;
+                this.showPet = showPet;
                 this.displayChanged = displayChanged;
                 CreateHandle(new CreateParams { Caption = Program.ControlWindowName });
             }
 
             protected override void WndProc(ref Message message)
             {
-                if (message.Msg == Program.ShowDashboard) show();
+                if (message.Msg == Program.ShowDashboard) showPanel();
+                if (message.Msg == Program.ShowDesktopPet) showPet();
                 const int displayChange = 0x007E;
                 const int powerBroadcast = 0x0218;
                 const int resumeAutomatic = 0x0012;

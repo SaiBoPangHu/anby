@@ -393,9 +393,9 @@ namespace AnbyPet
     {
         internal static readonly Color Canvas = Color.FromArgb(21, 26, 24);
         internal static readonly Color Surface = Color.FromArgb(34, 41, 37);
-        private static readonly Color Ink = Color.FromArgb(244, 248, 242);
+        internal static readonly Color Ink = Color.FromArgb(244, 248, 242);
         internal static readonly Color Muted = Color.FromArgb(168, 185, 171);
-        private static readonly Color Lime = Color.FromArgb(211, 250, 111);
+        internal static readonly Color Lime = Color.FromArgb(211, 250, 111);
         private static readonly Color Amber = Color.FromArgb(255, 204, 129);
         internal static readonly Color Divider = Color.FromArgb(54, 65, 57);
         private const TextFormatFlags CellFlags = TextFormatFlags.SingleLine | TextFormatFlags.VerticalCenter |

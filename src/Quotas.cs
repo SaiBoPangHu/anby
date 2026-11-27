@@ -88,9 +88,17 @@ namespace AnbyPet
         private static extern bool QueryFullProcessImageName(IntPtr handle, uint flags, StringBuilder image, ref int size);
     }
 
+    internal enum QuotaPeriod
+    {
+        Other,
+        FiveHours,
+        Weekly
+    }
+
     internal sealed class QuotaWindow
     {
         internal string Name;
+        internal QuotaPeriod Period;
         internal double? RemainingPercent;
         internal double? RemainingAmount;
         internal DateTimeOffset? Reset;
@@ -231,6 +239,7 @@ namespace AnbyPet
             {
                 Name = (string.IsNullOrWhiteSpace(pool) ? "" : ShortLabel(pool) + " · ") +
                     (duration.HasValue ? DurationLabel(duration.Value) : fallback),
+                Period = duration == 300 ? QuotaPeriod.FiveHours : duration == 10080 ? QuotaPeriod.Weekly : QuotaPeriod.Other,
                 RemainingPercent = Math.Max(0, Math.Min(100, 100 - used.Value)),
                 Reset = UnixTime(Json.Number(window, account ? "resetsAt" : "resets_at"))
             });
@@ -313,6 +322,25 @@ namespace AnbyPet
             return trimmed;
         }
 
+        internal static QuotaPeriod BucketPeriod(string id, string label, string window = null, string bucketName = null)
+        {
+            var known = KnownBucketLabel(id);
+            string windowLabel = known ?? FormatWindowName(window, bucketName);
+            if (string.IsNullOrWhiteSpace(windowLabel)) windowLabel = label ?? "";
+            int separator = windowLabel.LastIndexOf('·');
+            switch (windowLabel.Substring(separator + 1).Trim().ToLowerInvariant())
+            {
+                case "5h":
+                case "5 小时":
+                case "5小时": return QuotaPeriod.FiveHours;
+                case "weekly":
+                case "周额度":
+                case "7 天":
+                case "7天": return QuotaPeriod.Weekly;
+                default: return QuotaPeriod.Other;
+            }
+        }
+
         private static string FormatWindowName(string window, string bucketName)
         {
             if (!string.IsNullOrWhiteSpace(window))
@@ -381,6 +409,7 @@ namespace AnbyPet
                 data.Windows.Add(new QuotaWindow
                 {
                     Name = string.IsNullOrWhiteSpace(label) ? FormatBucketLabel(bucket.Key) : CodexSnapshots.ShortLabel(label),
+                    Period = BucketPeriod(bucket.Key, label),
                     RemainingPercent = ratio.HasValue ? ratio.Value * 100 : (double?)null,
                     RemainingAmount = amount,
                     Reset = ParseReset(Json.Text(entry, "reset_time"))
@@ -768,6 +797,7 @@ namespace AnbyPet
                         snapshot.Windows.Add(new QuotaWindow
                         {
                             Name = label,
+                            Period = AntigravitySnapshots.BucketPeriod(id, label, window, bucketName),
                             RemainingPercent = ratio.HasValue ? ratio.Value * 100 : (double?)null,
                             RemainingAmount = amount,
                             Reset = reset
